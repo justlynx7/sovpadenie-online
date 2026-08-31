@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#16161a" />
+  <title>СОВПАДЕНИЕ online — неофициальная веб-версия</title>
+  <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
+  <style>
+    :root{
+      --bg:#121216;--panel:#1b1b22;--panel2:#24242e;--text:#f7f4ed;--muted:#aaa8b3;
+      --accent:#ffd447;--accent2:#9ee493;--danger:#ff7b7b;--blue:#8fb8ff;--line:#353542;
+      --shadow:0 18px 50px rgba(0,0,0,.35);--r:22px;
+    }
+    *{box-sizing:border-box}
+    html,body{min-height:100%}
+    body{margin:0;background:radial-gradient(circle at 20% -10%,#30284f 0,transparent 34%),radial-gradient(circle at 90% 10%,#344b45 0,transparent 28%),var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    button,input,select{font:inherit}
+    button{cursor:pointer}
+    .app{max-width:980px;margin:0 auto;padding:18px 16px 60px}
+    .topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px}
+    .brand{display:flex;align-items:center;gap:12px;font-weight:900;letter-spacing:.02em}
+    .logo{width:44px;height:44px;border-radius:15px;display:grid;place-items:center;background:var(--accent);color:#171717;font-size:24px;box-shadow:var(--shadow)}
+    .brand small{display:block;color:var(--muted);font-weight:650;letter-spacing:0;font-size:12px;margin-top:2px}
+    .pill{display:inline-flex;align-items:center;gap:7px;padding:8px 11px;border:1px solid var(--line);background:rgba(255,255,255,.04);border-radius:999px;color:var(--muted);font-size:13px}
+    .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+    .dot.on{background:var(--accent2);box-shadow:0 0 0 4px rgba(158,228,147,.12)}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.015)),var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+    .hero{padding:26px}
+    h1,h2,h3,p{margin-top:0}
+    h1{font-size:clamp(30px,7vw,58px);line-height:.96;margin-bottom:14px;letter-spacing:-.045em}
+    .lead{color:#d5d2dc;line-height:1.55;max-width:720px;margin-bottom:20px}
+    .tabs{display:flex;gap:8px;padding:5px;background:#111116;border-radius:15px;margin:18px 0}
+    .tab{flex:1;border:0;border-radius:11px;padding:12px;background:transparent;color:var(--muted);font-weight:800}
+    .tab.active{background:var(--panel2);color:var(--text)}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .field{display:flex;flex-direction:column;gap:7px;margin-bottom:12px}
+    label{font-size:13px;color:var(--muted);font-weight:750}
+    input,select{width:100%;border:1px solid var(--line);background:#121219;color:var(--text);border-radius:14px;padding:14px 15px;outline:none}
+    input:focus,select:focus{border-color:#6f6f86;box-shadow:0 0 0 3px rgba(143,184,255,.10)}
+    .btn{border:0;border-radius:14px;padding:13px 16px;font-weight:900;background:var(--accent);color:#171717;transition:.15s transform,.15s opacity;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+    .btn:active{transform:translateY(1px)}
+    .btn:disabled{opacity:.35;cursor:not-allowed}
+    .btn.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+    .btn.danger{background:#442329;color:#ffd9d9;border:1px solid #66313a}
+    .btn.small{padding:9px 11px;border-radius:11px;font-size:13px}
+    .actions{display:flex;gap:9px;flex-wrap:wrap}
+    .note{font-size:13px;color:var(--muted);line-height:1.5;margin-top:12px}
+    .hidden{display:none!important}
+    .section{margin-top:16px}
+    .lobbyHead{padding:20px;display:flex;align-items:flex-start;justify-content:space-between;gap:15px}
+    .roomCode{font-size:32px;font-weight:950;letter-spacing:.12em;color:var(--accent)}
+    .players{padding:0 20px 20px}
+    .playerRow{display:flex;align-items:center;gap:10px;padding:11px 0;border-top:1px solid var(--line)}
+    .avatar{width:38px;height:38px;border-radius:13px;background:#30303c;display:grid;place-items:center;font-weight:950;color:#fff;flex:0 0 auto}
+    .playerMain{min-width:0;flex:1}
+    .playerName{font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .playerSub{font-size:12px;color:var(--muted);margin-top:2px}
+    .score{font-size:20px;font-weight:950;color:var(--accent)}
+    .gameHeader{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;margin-bottom:12px}
+    .roundTitle{font-size:13px;color:var(--muted);font-weight:850;text-transform:uppercase;letter-spacing:.1em}
+    .roundType{font-size:29px;font-weight:950;margin-top:3px}
+    .timer{width:82px;height:82px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--accent) var(--p,100%),#33333e 0);position:relative}
+    .timer:after{content:"";position:absolute;inset:7px;border-radius:50%;background:var(--panel)}
+    .timer span{position:relative;z-index:1;font-size:22px;font-weight:950}
+    .promptCard{padding:22px;margin-bottom:12px;position:relative;overflow:hidden}
+    .promptCard:before{content:"";position:absolute;width:180px;height:180px;border-radius:50%;right:-75px;top:-90px;background:rgba(255,212,71,.10)}
+    .promptLabel{color:var(--muted);text-transform:uppercase;font-size:12px;font-weight:900;letter-spacing:.12em;margin-bottom:8px}
+    .promptText{font-size:clamp(26px,7vw,43px);font-weight:950;line-height:1.08;letter-spacing:-.03em}
+    .blitzGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-top:4px}
+    .blitzItem{padding:13px 14px;border:1px solid var(--line);border-radius:14px;background:#14141a;font-weight:800}
+    .answerPanel{padding:18px}
+    .answerGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .answerWrap{position:relative}
+    .answerWrap b{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:12px;color:#727280}
+    .answerWrap input{padding-left:36px}
+    .submittedBox{padding:16px;border-radius:16px;background:#18241d;border:1px solid #294334;color:#d9ffe3;font-weight:750}
+    .statusStrip{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .statusChip{padding:7px 10px;border-radius:999px;border:1px solid var(--line);font-size:12px;color:var(--muted);background:#15151b}
+    .statusChip.done{color:#dfffe6;border-color:#2f4b37;background:#18241d}
+    .revealGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .resultCard{padding:16px}
+    .resultTop{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:11px}
+    .answerChips{display:flex;flex-wrap:wrap;gap:7px}
+    .answerChip{font-size:13px;padding:7px 9px;border-radius:10px;border:1px solid var(--line);background:#15151b}
+    .answerChip.good{border-color:#355f40;background:#1b2d20;color:#ddffe4}
+    .answerChip.bad{opacity:.56;text-decoration:line-through}
+    .answerChip.empty{opacity:.35}
+    .pointsLine{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding-top:11px;margin-top:12px}
+    .adj{display:flex;align-items:center;gap:7px}
+    .adjNum{min-width:36px;text-align:center;font-weight:950}
+    .leaderboard{padding:18px}
+    .rankRow{display:grid;grid-template-columns:38px 1fr auto;gap:10px;align-items:center;padding:11px 0;border-top:1px solid var(--line)}
+    .rankRow:first-child{border-top:0}
+    .rank{font-size:18px;font-weight:950;color:var(--muted)}
+    .finalHero{text-align:center;padding:30px 20px}
+    .trophy{font-size:72px;margin-bottom:6px}
+    .winner{font-size:36px;font-weight:950;letter-spacing:-.03em}
+    .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:#f5f1e8;color:#181818;padding:11px 15px;border-radius:12px;font-weight:800;opacity:0;pointer-events:none;transition:.2s;z-index:50;box-shadow:var(--shadow);max-width:90vw;text-align:center}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    dialog{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:20px;padding:0;max-width:660px;width:calc(100% - 28px);box-shadow:var(--shadow)}
+    dialog::backdrop{background:rgba(0,0,0,.62);backdrop-filter:blur(5px)}
+    .modal{padding:22px}
+    .modal p,.modal li{color:#cfccd6;line-height:1.52}
+    .modal ul{padding-left:19px}
+    .footer{margin-top:18px;text-align:center;color:#777582;font-size:12px;line-height:1.5}
+    .connectionWarning{padding:12px 14px;border:1px solid #6c4d23;background:#2c2417;color:#ffe2a9;border-radius:14px;margin-top:12px;font-size:13px;line-height:1.45}
+    @media(max-width:700px){
+      .grid2,.answerGrid,.revealGrid{grid-template-columns:1fr}.hero{padding:20px}.topbar{align-items:flex-start}.pill.hideMobile{display:none}.lobbyHead{flex-direction:column}.gameHeader{grid-template-columns:1fr 72px}.timer{width:70px;height:70px}.blitzGrid{grid-template-columns:1fr}.app{padding-left:12px;padding-right:12px}.promptCard{padding:18px}.resultCard{padding:14px}
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="brand"><div class="logo">🦉</div><div>СОВПАДЕНИЕ online<small>неофициальная веб-версия для компании</small></div></div>
+    <div class="pill hideMobile"><span id="netDot" class="dot"></span><span id="netText">не подключено</span></div>
+  </div>
+
+  <section id="setup" class="card hero">
+    <h1>Поймайте мысли друг друга.</h1>
+    <p class="lead">Шесть быстрых раундов: два на совпадения, два на уникальные ответы и два блица. Нужен только браузер. Один человек создаёт комнату, остальные входят по коду.</p>
+    <div class="tabs">
+      <button id="tabCreate" class="tab active">Создать комнату</button>
+      <button id="tabJoin" class="tab">Войти по коду</button>
+    </div>
+
+    <div id="createForm">
+      <div class="grid2">
+        <div class="field"><label for="hostName">Ваше имя</label><input id="hostName" maxlength="24" autocomplete="name" placeholder="Ибрагим" /></div>
+        <div class="field"><label for="roundSeconds">Время на раунд</label><select id="roundSeconds"><option value="60" selected>60 секунд</option><option value="75">75 секунд</option><option value="90">90 секунд</option><option value="45">45 секунд</option></select></div>
+      </div>
+      <div class="actions"><button id="createBtn" class="btn">Создать комнату</button><button class="btn secondary" data-rules>Правила</button></div>
+      <div class="note">Работает через прямое P2P-соединение браузеров. Для самой стабильной игры лучше открыть этот файл с HTTPS-хостинга; на большинстве современных браузеров он работает и как обычный HTML-файл.</div>
+    </div>
+
+    <div id="joinForm" class="hidden">
+      <div class="grid2">
+        <div class="field"><label for="guestName">Ваше имя</label><input id="guestName" maxlength="24" autocomplete="name" placeholder="Маша" /></div>
+        <div class="field"><label for="joinCode">Код комнаты</label><input id="joinCode" maxlength="6" inputmode="text" autocapitalize="characters" placeholder="A7K9QP" /></div>
+      </div>
+      <div class="actions"><button id="joinBtn" class="btn">Войти в комнату</button><button class="btn secondary" data-rules>Правила</button></div>
+    </div>
+    <div id="setupError" class="connectionWarning hidden"></div>
+  </section>
+
+  <section id="lobby" class="section hidden">
+    <div class="card">
+      <div class="lobbyHead">
+        <div>
+          <div class="promptLabel">Код комнаты</div>
+          <div id="roomCodeText" class="roomCode">------</div>
+          <div class="note">Игроков: <span id="lobbyCount">0</span>/8. По классическим правилам нужно 3–8 человек.</div>
+        </div>
+        <div class="actions"><button id="copyCodeBtn" class="btn secondary small">Копировать код</button><button id="copyLinkBtn" class="btn secondary small">Копировать ссылку</button></div>
+      </div>
+      <div id="lobbyPlayers" class="players"></div>
+    </div>
+    <div id="hostLobbyControls" class="card hero section hidden">
+      <h3>Готовы?</h3>
+      <p class="lead">Встроенные темы — авторские, чтобы не копировать карточки оригинального издания. Механика раундов и подсчёта очков сохранена.</p>
+      <div class="actions"><button id="startGameBtn" class="btn" disabled>Начать игру</button><button class="btn secondary" data-rules>Правила</button></div>
+    </div>
+    <div id="guestLobbyHint" class="card hero section hidden"><h3>Ждём ведущего</h3><p class="lead">Когда ведущий запустит партию, первый раунд начнётся у всех одновременно.</p></div>
+  </section>
+
+  <section id="game" class="section hidden">
+    <div class="gameHeader">
+      <div><div id="roundTitle" class="roundTitle">Раунд 1 из 6</div><div id="roundType" class="roundType">🦉 Совы</div></div>
+      <div id="timer" class="timer" style="--p:100%"><span id="timerText">60</span></div>
+    </div>
+    <div class="card promptCard">
+      <div id="promptLabel" class="promptLabel">Дайте 6 самых очевидных ассоциаций</div>
+      <div id="promptText" class="promptText"></div>
+      <div id="blitzPrompt" class="blitzGrid hidden"></div>
+    </div>
+    <div id="answerPanel" class="card answerPanel"></div>
+    <div id="answerStatuses" class="statusStrip"></div>
+    <div id="hostRoundControls" class="actions section hidden"><button id="forceRevealBtn" class="btn secondary">Открыть ответы сейчас</button></div>
+    <div class="section card leaderboard"><div class="promptLabel">Счёт</div><div id="miniBoard"></div></div>
+  </section>
+
+  <section id="reveal" class="section hidden">
+    <div class="card hero">
+      <div id="revealTitle" class="promptLabel">Результаты раунда</div>
+      <h2 id="revealHeading">Вот где вы совпали</h2>
+      <p id="revealHelp" class="lead">Автоподсчёт сравнивает ответы без учёта регистра, знаков препинания и ё/е. Синонимы, формы слов и спорные случаи можно поправить вручную.</p>
+    </div>
+    <div id="revealGrid" class="revealGrid section"></div>
+    <div id="revealControls" class="actions section"></div>
+  </section>
+
+  <section id="final" class="section hidden">
+    <div class="card finalHero"><div class="trophy">🏆</div><div class="promptLabel">Победитель</div><div id="winnerText" class="winner"></div><p id="winnerSub" class="lead" style="margin:10px auto 0"></p></div>
+    <div class="card leaderboard section"><div class="promptLabel">Итоговая таблица</div><div id="finalBoard"></div></div>
+    <div id="finalControls" class="actions section"></div>
+  </section>
+
+  <div class="footer">Неофициальная фанатская реализация механики SiXeS / «СОВпадение». Не связана с Hobby World или Eagle-Gryphon Games. Встроенный набор тем создан специально для этой веб-версии.</div>
+</div>
+
+<div id="toast" class="toast"></div>
+<dialog id="rulesDialog"><div class="modal"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><h2 style="margin:0">Как играть</h2><button id="closeRules" class="btn secondary small">Закрыть</button></div><ul>
+<li>Всего 6 раундов: 1 и 4 — «Совы», 2 и 5 — «Жаворонки», 3 и 6 — «Блиц».</li>
+<li><b>Совы:</b> напишите 6 очевидных ассоциаций к одной теме. Каждый ответ, который есть хотя бы у одного другого игрока, даёт 1 очко.</li>
+<li><b>Жаворонки:</b> напишите 6 корректных представителей указанной категории так, чтобы никто их не повторил. Каждый уникальный ответ даёт 1 очко.</li>
+<li><b>Блиц:</b> на экране 6 категорий. В каждую строку — один самый очевидный ответ. Совпадение в той же строке даёт 1 очко.</li>
+<li>Если все 6 ответов принесли очки, вы получаете ещё +1 бонусное очко.</li>
+<li>Спорные совпадения и синонимы решайте компанией. Ведущий может вручную добавить или снять очки на экране результатов.</li>
+</ul><p class="note">В «Жаворонках» ответ должен действительно входить в названное множество. Например, для категории «Птицы» подходит «ворон», но не «крылья».</p></div></dialog>
+
+<script>
+(() => {
+'use strict';
+
+const ROUND_TYPES = ['owl','lark','blitz','owl','lark','blitz'];
+const TYPE_META = {
+  owl:{title:'🦉 Совы', instruction:'Дайте 6 самых очевидных ассоциаций', goodText:'совпадение'},
+  lark:{title:'🐦 Жаворонки', instruction:'Дайте 6 редких, но точных ответов', goodText:'уникальный ответ'},
+  blitz:{title:'⚡ Блиц', instruction:'По 1 самому очевидному ответу на каждую тему', goodText:'совпадение'}
+};
+
+const OWL_CARDS = [
+  'Лето','Свадьба','Кинотеатр','Университет','Отпуск','Новый год','Космос','Море','Поезд','Аэропорт',
+  'Детство','Школа','Пятница','Москва','Дождь','Кофе','Ресторан','Путешествие','Горы','Интернет',
+  'Работа','Любовь','День рождения','Пляж','Футбол','Музыка','Кошка','Собака','Зима','Утро',
+  'Вечеринка','Дом','Книга','Автомобиль','Лес','Телефон','Сон','Счастье','Ремонт','Экзамен',
+  'Дача','Поход','Супермаркет','Больница','Театр','Парк','Подарок','Чемодан'
+];
+
+const LARK_CARDS = [
+  'Породы собак','Страны Африки','Столицы Европы','Овощи','Фрукты','Музыкальные инструменты','Птицы','Рыбы',
+  'Виды спорта','Школьные предметы','Языки мира','Реки России','Моря','Островные государства','Профессии','Цветы',
+  'Деревья','Марки автомобилей','Виды сыра','Блюда итальянской кухни','Страны Южной Америки','Настольные игры','Мессенджеры','Океаны и моря',
+  'Российские города','Химические элементы','Породы кошек','Виды танцев','Жанры кино','Жанры музыки','Виды супа','Пряности и специи',
+  'Млекопитающие','Насекомые','Горные системы','Виды транспорта','Предметы мебели','Кухонная утварь','Зимние виды спорта','Ягоды',
+  'Съедобные грибы','Виды пасты','Страны Азии','Столицы стран мира','Виды обуви','Карточные игры','Молочные продукты','Виды выпечки'
+];
+
+const BLITZ_POOL = [
+  'Фрукт','Овощ','Столица','Город России','Марка автомобиля','Суп','Десерт','Напиток','Птица','Рыба','Порода собаки','Порода кошки',
+  'Музыкальный инструмент','Певец','Актёр','Фильм','Мультфильм','Сериал','Книга','Писатель','Сказочный персонаж','Супергерой','Вид спорта','Футболист',
+  'Школьный предмет','Профессия','Мессенджер','Социальная сеть','Приложение в телефоне','Сайт','Магазин','Ресторанная кухня','Блюдо на завтрак','Гарнир','Соус','Специя',
+  'Цвет','Цветок','Дерево','Ягода','Гриб','Животное','Насекомое','Морское животное','Динозавр','Планета','Созвездие','Природное явление',
+  'Месяц','День недели','Праздник','Подарок','То, что берут в отпуск','То, что лежит в холодильнике','То, что есть в ванной','То, что есть на кухне','То, что есть в машине','То, что есть в офисе',
+  'Страна для отпуска','Остров','Море','Река','Гора','Аэропорт','Авиакомпания','Поезд','Вид транспорта','Марка телефона','Игровая приставка','Компьютерная игра',
+  'Настольная игра','Карточная игра','Вид обуви','Предмет одежды','Украшение','Парфюм','Косметика','Материал','Металл','Драгоценный камень','Инструмент','Предмет мебели',
+  'Бытовая техника','Кухонный прибор','Сладость','Мороженое','Сыр','Хлеб','Фастфуд','Пицца','Японское блюдо','Итальянское блюдо','Французское блюдо','Восточная сладость',
+  'Историческая личность','Учёный','Художник','Композитор','Политик XX века','Изобретение','Валюта','Язык','Столица Европы','Страна Азии','Страна Африки','Страна Южной Америки'
+];
+
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+const sleep = ms => new Promise(r => setTimeout(r,ms));
+const randomCode = () => { const a='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<6;i++) s+=a[Math.floor(Math.random()*a.length)]; return s; };
+const randomToken = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)+Date.now().toString(36));
+let myToken = localStorage.getItem('sovpad-player-token');
+if(!myToken){ myToken=randomToken(); localStorage.setItem('sovpad-player-token',myToken); }
+
+let peer=null, hostConn=null, isHost=false, hostGame=null, publicState=null, connByToken=new Map(), tokenByPeer=new Map();
+let localAnswers=Array(6).fill(''), localLocked=false, roundTick=null, currentRoom='', lastAnswerRound=-1;
+
+function setNet(text,on=false){ $('netText').textContent=text; $('netDot').classList.toggle('on',on); }
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._x); t._x=setTimeout(()=>t.classList.remove('show'),2200); }
+function showError(msg){ $('setupError').textContent=msg; $('setupError').classList.remove('hidden'); }
+function hideError(){ $('setupError').classList.add('hidden'); }
+function switchTab(which){
+  const create=which==='create'; $('tabCreate').classList.toggle('active',create); $('tabJoin').classList.toggle('active',!create);
+  $('createForm').classList.toggle('hidden',!create); $('joinForm').classList.toggle('hidden',create); hideError();
+}
+$('tabCreate').onclick=()=>switchTab('create'); $('tabJoin').onclick=()=>switchTab('join');
+document.querySelectorAll('[data-rules]').forEach(b=>b.onclick=()=>$('rulesDialog').showModal());
+$('closeRules').onclick=()=>$('rulesDialog').close();
+
+function cleanAnswer(s){
+  return String(s||'').toLowerCase().trim().replace(/ё/g,'е').replace(/[^\p{L}\p{N}\s-]/gu,'').replace(/\s+/g,' ');
+}
+function shuffle(a){ const x=[...a]; for(let i=x.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [x[i],x[j]]=[x[j],x[i]]; } return x; }
+function generatePrompt(type){
+  if(type==='owl') return shuffle(OWL_CARDS)[0];
+  if(type==='lark') return shuffle(LARK_CARDS)[0];
+  return shuffle(BLITZ_POOL).slice(0,6);
+}
+function playerArray(){ return hostGame ? Object.values(hostGame.players).sort((a,b)=>a.seat-b.seat) : []; }
+function meFromState(){ return publicState?.players?.find(p=>p.token===myToken) || null; }
+function gameType(){ return ROUND_TYPES[publicState?.roundIndex ?? hostGame?.roundIndex ?? 0]; }
+function scoreSorted(players){ return [...players].sort((a,b)=>b.score-a.score || b.bonusTotal-a.bonusTotal || a.seat-b.seat); }
+
+function sanitizeState(){
+  if(!hostGame) return null;
+  return {
+    roomCode:hostGame.roomCode, phase:hostGame.phase, roundIndex:hostGame.roundIndex, currentPrompt:hostGame.currentPrompt,
+    deadline:hostGame.deadline, roundSeconds:hostGame.roundSeconds,
+    players:playerArray().map(p=>({token:p.token,name:p.name,score:p.score,bonusTotal:p.bonusTotal,connected:p.connected,isHost:p.isHost,seat:p.seat,submitted:!!p.submitted,roundScore:p.roundScore||0,manualAdj:p.manualAdj||0})),
+    roundResults:hostGame.phase==='reveal'||hostGame.phase==='final' ? hostGame.roundResults : null,
+    winnerTokens:hostGame.winnerTokens||[]
+  };
+}
+function sendToConn(conn,data){ try{ if(conn?.open) conn.send(data); }catch(e){} }
+function broadcast(){
+  if(!isHost||!hostGame) return;
+  publicState=sanitizeState(); render();
+  for(const conn of connByToken.values()) sendToConn(conn,{type:'state',state:publicState});
+}
+function sendError(conn,msg){ sendToConn(conn,{type:'error',message:msg}); }
+
+async function createRoom(){
+  hideError();
+  const name=$('hostName').value.trim(); if(!name){ showError('Введите имя.'); return; }
+  if(typeof Peer==='undefined'){ showError('Не загрузилась библиотека P2P. Проверьте интернет и перезагрузите страницу.'); return; }
+  $('createBtn').disabled=true; setNet('создаём комнату…');
+  for(let attempt=0;attempt<5;attempt++){
+    currentRoom=randomCode();
+    const ok=await startHostPeer(currentRoom,name);
+    if(ok) return;
+  }
+  $('createBtn').disabled=false; showError('Не удалось создать комнату. Попробуйте ещё раз.'); setNet('ошибка');
+}
+
+function startHostPeer(code,name){
+  return new Promise(resolve=>{
+    try{ peer?.destroy(); }catch(e){}
+    const hostId='sovpadenie-'+code.toLowerCase();
+    peer=new Peer(hostId,{debug:1,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]}});
+    let done=false;
+    peer.on('open',()=>{
+      if(done) return; done=true; isHost=true; setNet('комната в сети',true);
+      const roundSeconds=Number($('roundSeconds').value)||60;
+      hostGame={roomCode:code,phase:'lobby',roundIndex:0,currentPrompt:null,deadline:0,roundSeconds,players:{},submissions:{},roundResults:null,winnerTokens:[],history:[]};
+      hostGame.players[myToken]={token:myToken,name,score:0,bonusTotal:0,connected:true,isHost:true,seat:0,submitted:false,roundScore:0,manualAdj:0};
+      publicState=sanitizeState();
+      peer.on('connection',handleIncomingConn);
+      peer.on('disconnected',()=>setNet('сигналинг потерян'));
+      enterLobby(); broadcast(); resolve(true);
+    });
+    peer.on('error',err=>{
+      if(err?.type==='unavailable-id' && !done){ done=true; try{peer.destroy();}catch(e){} resolve(false); return; }
+      if(!done){ done=true; resolve(false); }
+      if(err?.type!=='peer-unavailable') toast('Ошибка соединения: '+(err?.type||'unknown'));
+    });
+    setTimeout(()=>{ if(!done){done=true; try{peer.destroy();}catch(e){} resolve(false);} },7000);
+  });
+}
+
+function handleIncomingConn(conn){
+  conn.on('data',msg=>handleHostMessage(conn,msg));
+  conn.on('close',()=>{
+    const token=tokenByPeer.get(conn.peer); if(token&&hostGame?.players[token]){ hostGame.players[token].connected=false; connByToken.delete(token); tokenByPeer.delete(conn.peer); broadcast(); }
+  });
+  conn.on('error',()=>{});
+}
+function handleHostMessage(conn,msg){
+  if(!msg||typeof msg!=='object') return;
+  if(msg.type==='join'){
+    const name=String(msg.name||'').trim().slice(0,24); const token=String(msg.token||'');
+    if(!name||!token){ sendError(conn,'Некорректные данные игрока.'); return; }
+    if(hostGame.phase!=='lobby' && !hostGame.players[token]){ sendError(conn,'Игра уже началась. Новые игроки не могут войти до следующей партии.'); return; }
+    const existing=hostGame.players[token];
+    if(!existing && playerArray().length>=8){ sendError(conn,'Комната заполнена: максимум 8 игроков.'); return; }
+    if(existing){ existing.name=name; existing.connected=true; }
+    else { const seats=playerArray().map(p=>p.seat); let seat=1; while(seats.includes(seat))seat++; hostGame.players[token]={token,name,score:0,bonusTotal:0,connected:true,isHost:false,seat,submitted:false,roundScore:0,manualAdj:0}; }
+    connByToken.set(token,conn); tokenByPeer.set(conn.peer,token); conn._playerToken=token;
+    sendToConn(conn,{type:'welcome',token,state:sanitizeState()}); broadcast(); return;
+  }
+  const token=conn._playerToken; if(!token||!hostGame.players[token]) return;
+  if(msg.type==='submit' && hostGame.phase==='answer') submitAnswers(token,msg.answers);
+  if(msg.type==='requestState') sendToConn(conn,{type:'state',state:sanitizeState()});
+}
+
+async function joinRoom(){
+  hideError();
+  const name=$('guestName').value.trim(); const code=$('joinCode').value.trim().toUpperCase().replace(/[^A-Z2-9]/g,'');
+  if(!name){ showError('Введите имя.'); return; } if(code.length!==6){ showError('Код комнаты состоит из 6 символов.'); return; }
+  if(typeof Peer==='undefined'){ showError('Не загрузилась библиотека P2P. Проверьте интернет и перезагрузите страницу.'); return; }
+  $('joinBtn').disabled=true; setNet('подключаемся…'); currentRoom=code; isHost=false;
+  try{ peer?.destroy(); }catch(e){}
+  peer=new Peer(undefined,{debug:1,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]}});
+  let timeout=setTimeout(()=>{ if(!hostConn?.open){ $('joinBtn').disabled=false; showError('Не удалось подключиться. Проверьте код и убедитесь, что ведущий не закрыл страницу.'); setNet('не подключено'); try{peer.destroy();}catch(e){} } },9000);
+  peer.on('open',()=>{
+    hostConn=peer.connect('sovpadenie-'+code.toLowerCase(),{reliable:true});
+    hostConn.on('open',()=>{ clearTimeout(timeout); setNet('подключено',true); sendToConn(hostConn,{type:'join',name,token:myToken}); });
+    hostConn.on('data',handleGuestMessage);
+    hostConn.on('close',()=>{ setNet('ведущий отключился'); toast('Связь с ведущим потеряна'); });
+    hostConn.on('error',()=>{});
+  });
+  peer.on('error',err=>{
+    if(err?.type==='peer-unavailable'){ clearTimeout(timeout); $('joinBtn').disabled=false; showError('Комната с таким кодом не найдена. Проверьте код и попробуйте снова.'); setNet('не подключено'); }
+  });
+}
+function handleGuestMessage(msg){
+  if(!msg||typeof msg!=='object') return;
+  if(msg.type==='error'){ $('joinBtn').disabled=false; showError(msg.message||'Ошибка входа.'); return; }
+  if(msg.type==='welcome'||msg.type==='state'){
+    publicState=msg.state; currentRoom=publicState.roomCode; enterLobbyOrGame(); render();
+  }
+}
+
+function enterLobby(){ $('setup').classList.add('hidden'); $('lobby').classList.remove('hidden'); $('game').classList.add('hidden'); $('reveal').classList.add('hidden'); $('final').classList.add('hidden'); }
+function enterLobbyOrGame(){ $('setup').classList.add('hidden'); const ph=publicState?.phase||'lobby'; $('lobby').classList.toggle('hidden',ph!=='lobby'); $('game').classList.toggle('hidden',ph!=='answer'); $('reveal').classList.toggle('hidden',ph!=='reveal'); $('final').classList.toggle('hidden',ph!=='final'); }
+
+function render(){
+  if(!publicState) return; enterLobbyOrGame();
+  if(publicState.phase==='lobby') renderLobby();
+  if(publicState.phase==='answer') renderAnswerPhase();
+  if(publicState.phase==='reveal') renderReveal();
+  if(publicState.phase==='final') renderFinal();
+}
+function renderLobby(){
+  $('roomCodeText').textContent=publicState.roomCode; $('lobbyCount').textContent=publicState.players.length;
+  $('hostLobbyControls').classList.toggle('hidden',!isHost); $('guestLobbyHint').classList.toggle('hidden',isHost);
+  const html=publicState.players.sort((a,b)=>a.seat-b.seat).map(p=>`<div class="playerRow"><div class="avatar">${esc((p.name||'?')[0].toUpperCase())}</div><div class="playerMain"><div class="playerName">${esc(p.name)} ${p.isHost?'<span class="pill" style="padding:3px 7px;font-size:10px">ведущий</span>':''}</div><div class="playerSub">${p.connected?'в сети':'не в сети'}</div></div>${isHost&&!p.isHost?`<button class="btn secondary small" data-kick="${esc(p.token)}">Убрать</button>`:''}</div>`).join('');
+  $('lobbyPlayers').innerHTML=html;
+  document.querySelectorAll('[data-kick]').forEach(b=>b.onclick=()=>removePlayer(b.dataset.kick));
+  if(isHost) $('startGameBtn').disabled=publicState.players.filter(p=>p.connected).length<3;
+}
+function removePlayer(token){
+  if(!isHost||hostGame.phase!=='lobby'||!hostGame.players[token]||hostGame.players[token].isHost) return;
+  const conn=connByToken.get(token); try{conn?.close();}catch(e){} connByToken.delete(token); delete hostGame.players[token]; broadcast();
+}
+
+function startGame(){
+  if(!isHost||hostGame.phase!=='lobby') return;
+  const active=playerArray().filter(p=>p.connected); if(active.length<3){toast('Нужно минимум 3 игрока');return;}
+  hostGame.roundIndex=0; hostGame.phase='answer'; hostGame.currentPrompt=generatePrompt(ROUND_TYPES[0]); hostGame.deadline=Date.now()+hostGame.roundSeconds*1000; hostGame.submissions={}; hostGame.roundResults=null;
+  for(const p of playerArray()){ p.submitted=false; p.roundScore=0; p.manualAdj=0; }
+  localAnswers=Array(6).fill(''); localLocked=false; broadcast();
+}
+function submitAnswers(token,answers){
+  if(!isHost||hostGame.phase!=='answer'||!hostGame.players[token]||hostGame.players[token].submitted) return;
+  const clean=Array.isArray(answers)?answers.slice(0,6).map(v=>String(v||'').trim().slice(0,80)):[];
+  while(clean.length<6) clean.push('');
+  hostGame.submissions[token]=clean; hostGame.players[token].submitted=true; broadcast();
+}
+function submitLocal(){
+  if(localLocked||!publicState||publicState.phase!=='answer') return;
+  const inputs=[...document.querySelectorAll('[data-answer]')]; localAnswers=inputs.map(i=>i.value.trim());
+  localLocked=true;
+  if(isHost) submitAnswers(myToken,localAnswers); else sendToConn(hostConn,{type:'submit',answers:localAnswers});
+  renderAnswerPhase();
+}
+function renderAnswerPhase(){
+  const type=ROUND_TYPES[publicState.roundIndex], meta=TYPE_META[type], me=meFromState();
+  if(publicState.roundIndex!==lastAnswerRound){ localAnswers=Array(6).fill(''); localLocked=!!me?.submitted; lastAnswerRound=publicState.roundIndex; }
+  $('roundTitle').textContent=`Раунд ${publicState.roundIndex+1} из 6`; $('roundType').textContent=meta.title; $('promptLabel').textContent=meta.instruction;
+  if(type==='blitz'){
+    $('promptText').classList.add('hidden'); $('blitzPrompt').classList.remove('hidden'); $('blitzPrompt').innerHTML=(publicState.currentPrompt||[]).map((x,i)=>`<div class="blitzItem"><span style="color:var(--muted);margin-right:7px">${i+1}.</span>${esc(x)}</div>`).join('');
+  } else { $('promptText').classList.remove('hidden'); $('blitzPrompt').classList.add('hidden'); $('promptText').textContent=publicState.currentPrompt||''; }
+  const submitted=!!me?.submitted;
+  if(!submitted && !localLocked){
+    const labels=type==='blitz'?(publicState.currentPrompt||[]):Array.from({length:6},(_,i)=>`Ответ ${i+1}`);
+    $('answerPanel').innerHTML=`<div class="answerGrid">${labels.map((lab,i)=>`<div class="answerWrap"><b>${i+1}</b><input data-answer="${i}" maxlength="80" autocomplete="off" value="${esc(localAnswers[i]||'')}" placeholder="${esc(type==='blitz'?lab:'Ваш ответ')}" /></div>`).join('')}</div><div class="actions" style="margin-top:12px"><button id="submitAnswersBtn" class="btn">Готово, отправить</button></div><div class="note">До открытия результатов другие игроки ваших ответов не видят.</div>`;
+    $('submitAnswersBtn').onclick=submitLocal;
+    document.querySelectorAll('[data-answer]').forEach(inp=>inp.oninput=()=>{localAnswers[Number(inp.dataset.answer)]=inp.value;});
+  } else {
+    $('answerPanel').innerHTML=`<div class="submittedBox">✓ Ответы отправлены. Ждём остальных игроков.</div>`;
+  }
+  $('answerStatuses').innerHTML=publicState.players.map(p=>`<div class="statusChip ${p.submitted?'done':''}">${esc(p.name)} · ${p.submitted?'готов':'пишет'}</div>`).join('');
+  $('hostRoundControls').classList.toggle('hidden',!isHost);
+  $('forceRevealBtn').disabled=!isHost||publicState.players.filter(p=>p.connected).some(p=>!p.submitted);
+  renderMiniBoard(); startTimerLoop();
+}
+function renderMiniBoard(){
+  const sorted=scoreSorted(publicState.players); $('miniBoard').innerHTML=sorted.map((p,i)=>`<div class="rankRow"><div class="rank">${i+1}</div><div><b>${esc(p.name)}</b>${p.isHost?' <span style="color:var(--muted);font-size:12px">ведущий</span>':''}</div><div class="score">${p.score}</div></div>`).join('');
+}
+function startTimerLoop(){
+  clearInterval(roundTick); const tick=()=>{
+    if(!publicState||publicState.phase!=='answer') return;
+    const ms=Math.max(0,publicState.deadline-Date.now()); const sec=Math.ceil(ms/1000); const total=publicState.roundSeconds*1000; const pct=Math.max(0,Math.min(100,ms/total*100));
+    $('timerText').textContent=sec; $('timer').style.setProperty('--p',pct+'%');
+    if(ms<=0){
+      clearInterval(roundTick);
+      const me=meFromState(); if(!me?.submitted&&!localLocked) submitLocal();
+      if(isHost) setTimeout(()=>{ if(hostGame?.phase==='answer') revealRound(); },450);
+    }
+  }; tick(); roundTick=setInterval(tick,250);
+}
+
+function calculateRoundResults(){
+  const type=ROUND_TYPES[hostGame.roundIndex]; const players=playerArray();
+  const submissions={}; for(const p of players){ submissions[p.token]=hostGame.submissions[p.token]||Array(6).fill(''); }
+  const details={}; players.forEach(p=>details[p.token]=Array.from({length:6},(_,i)=>({text:submissions[p.token][i]||'',norm:cleanAnswer(submissions[p.token][i]),good:false,duplicate:false})));
+
+  if(type==='blitz'){
+    for(let i=0;i<6;i++){
+      const map=new Map();
+      for(const p of players){ const n=details[p.token][i].norm; if(!n) continue; if(!map.has(n)) map.set(n,new Set()); map.get(n).add(p.token); }
+      for(const p of players){ const d=details[p.token][i]; d.good=!!d.norm && (map.get(d.norm)?.size||0)>=2; }
+    }
+  } else {
+    const map=new Map();
+    for(const p of players){
+      const ownSeen=new Set();
+      for(let i=0;i<6;i++){
+        const d=details[p.token][i]; if(!d.norm) continue;
+        if(ownSeen.has(d.norm)){ d.duplicate=true; continue; }
+        ownSeen.add(d.norm); if(!map.has(d.norm)) map.set(d.norm,new Set()); map.get(d.norm).add(p.token);
+      }
+    }
+    for(const p of players){ for(let i=0;i<6;i++){ const d=details[p.token][i]; if(!d.norm||d.duplicate){d.good=false;continue;} const count=map.get(d.norm)?.size||0; d.good=type==='owl'?count>=2:count===1; } }
+  }
+
+  const results={type,players:{}};
+  for(const p of players){
+    const ds=details[p.token]; const base=ds.filter(x=>x.good).length; const bonus=base===6?1:0;
+    results.players[p.token]={token:p.token,name:p.name,answers:ds.map(x=>({text:x.text,good:x.good,duplicate:x.duplicate})),base,bonus,manualAdj:0,total:base+bonus};
+  }
+  return results;
+}
+function revealRound(){
+  if(!isHost||hostGame.phase!=='answer') return;
+  for(const p of playerArray()){ if(!p.submitted){ hostGame.submissions[p.token]=Array(6).fill(''); p.submitted=true; } }
+  hostGame.roundResults=calculateRoundResults(); hostGame.phase='reveal';
+  for(const p of playerArray()){ const r=hostGame.roundResults.players[p.token]; p.roundScore=r.total; p.manualAdj=0; }
+  broadcast();
+}
+function renderReveal(){
+  clearInterval(roundTick); const type=publicState.roundResults?.type||ROUND_TYPES[publicState.roundIndex];
+  $('revealTitle').textContent=`Раунд ${publicState.roundIndex+1} из 6 · ${TYPE_META[type].title}`;
+  $('revealHeading').textContent=type==='lark'?'Кто сумел быть уникальным':'Вот где вы совпали';
+  const byToken=publicState.roundResults?.players||{};
+  $('revealGrid').innerHTML=publicState.players.sort((a,b)=>a.seat-b.seat).map(p=>{
+    const r=byToken[p.token]||{answers:[],base:0,bonus:0,total:0}; const adj=p.manualAdj||0; const total=(r.base||0)+(r.bonus||0)+adj;
+    const chips=(r.answers||[]).map((a,i)=>`<span class="answerChip ${a.text?(a.good?'good':'bad'):'empty'}" title="Ответ ${i+1}">${esc(a.text||'—')}${a.duplicate?' · повтор':''}</span>`).join('');
+    return `<div class="card resultCard"><div class="resultTop"><div><div class="playerName">${esc(p.name)}</div><div class="playerSub">${r.base} за ответы${r.bonus?` + ${r.bonus} бонус`:''}</div></div><div class="score">+${total}</div></div><div class="answerChips">${chips}</div><div class="pointsLine"><span class="playerSub">Ручная поправка</span><div class="adj">${isHost?`<button class="btn secondary small" data-adj="${esc(p.token)}" data-delta="-1">−</button>`:''}<span class="adjNum">${adj>0?'+':''}${adj}</span>${isHost?`<button class="btn secondary small" data-adj="${esc(p.token)}" data-delta="1">+</button>`:''}</div></div></div>`;
+  }).join('');
+  document.querySelectorAll('[data-adj]').forEach(b=>b.onclick=()=>adjustScore(b.dataset.adj,Number(b.dataset.delta)));
+  $('revealControls').innerHTML=isHost?`<button id="nextRoundBtn" class="btn">${publicState.roundIndex===5?'Показать итог':'Следующий раунд'}</button><button class="btn secondary" data-rules2>Правила</button>`:`<div class="pill">Ждём ведущего…</div>`;
+  const next=$('nextRoundBtn'); if(next) next.onclick=applyRoundAndContinue;
+  const rr=document.querySelector('[data-rules2]'); if(rr) rr.onclick=()=>$('rulesDialog').showModal();
+}
+function adjustScore(token,delta){
+  if(!isHost||hostGame.phase!=='reveal'||!hostGame.players[token]) return;
+  hostGame.players[token].manualAdj=Math.max(-7,Math.min(7,(hostGame.players[token].manualAdj||0)+delta));
+  const r=hostGame.roundResults.players[token]; r.manualAdj=hostGame.players[token].manualAdj; r.total=r.base+r.bonus+r.manualAdj; broadcast();
+}
+function applyRoundAndContinue(){
+  if(!isHost||hostGame.phase!=='reveal') return;
+  for(const p of playerArray()){
+    const r=hostGame.roundResults.players[p.token]; const finalRoundPoints=r.base+r.bonus+(p.manualAdj||0); p.score+=finalRoundPoints; p.bonusTotal+=r.bonus||0; p.roundScore=finalRoundPoints;
+  }
+  hostGame.history.push({roundIndex:hostGame.roundIndex,results:hostGame.roundResults});
+  if(hostGame.roundIndex===5){ finishGame(); return; }
+  hostGame.roundIndex++; hostGame.phase='answer'; hostGame.currentPrompt=generatePrompt(ROUND_TYPES[hostGame.roundIndex]); hostGame.deadline=Date.now()+hostGame.roundSeconds*1000; hostGame.submissions={}; hostGame.roundResults=null;
+  for(const p of playerArray()){p.submitted=false;p.roundScore=0;p.manualAdj=0;}
+  localAnswers=Array(6).fill(''); localLocked=false; broadcast();
+}
+function finishGame(){
+  hostGame.phase='final'; const sorted=scoreSorted(playerArray()); const top=sorted[0]; hostGame.winnerTokens=sorted.filter(p=>p.score===top.score && p.bonusTotal===top.bonusTotal).map(p=>p.token); broadcast();
+}
+function renderFinal(){
+  const sorted=scoreSorted(publicState.players); const winners=sorted.filter(p=>publicState.winnerTokens.includes(p.token));
+  $('winnerText').textContent=winners.map(p=>p.name).join(' и '); $('winnerSub').textContent=winners.length>1?`Ничья: ${winners[0].score} очков и одинаковое число бонусов.`:`${winners[0]?.score??0} очков · бонусов за идеальные шестёрки: ${winners[0]?.bonusTotal??0}`;
+  $('finalBoard').innerHTML=sorted.map((p,i)=>`<div class="rankRow"><div class="rank">${i+1}</div><div><b>${esc(p.name)}</b><div class="playerSub">бонусов: ${p.bonusTotal}</div></div><div class="score">${p.score}</div></div>`).join('');
+  $('finalControls').innerHTML=isHost?`<button id="restartBtn" class="btn">Сыграть ещё раз</button><button id="backLobbyBtn" class="btn secondary">Вернуться в лобби</button>`:`<div class="pill">Партия окончена</div>`;
+  if($('restartBtn')) $('restartBtn').onclick=restartGame;
+  if($('backLobbyBtn')) $('backLobbyBtn').onclick=backToLobby;
+}
+function restartGame(){
+  if(!isHost) return; for(const p of playerArray()){p.score=0;p.bonusTotal=0;p.submitted=false;p.roundScore=0;p.manualAdj=0;} hostGame.history=[];hostGame.winnerTokens=[];hostGame.roundIndex=0;hostGame.phase='answer';hostGame.currentPrompt=generatePrompt('owl');hostGame.deadline=Date.now()+hostGame.roundSeconds*1000;hostGame.submissions={};hostGame.roundResults=null;localAnswers=Array(6).fill('');localLocked=false;broadcast();
+}
+function backToLobby(){
+  if(!isHost) return; for(const p of playerArray()){p.score=0;p.bonusTotal=0;p.submitted=false;p.roundScore=0;p.manualAdj=0;} hostGame.history=[];hostGame.winnerTokens=[];hostGame.roundIndex=0;hostGame.phase='lobby';hostGame.currentPrompt=null;hostGame.deadline=0;hostGame.submissions={};hostGame.roundResults=null;localAnswers=Array(6).fill('');localLocked=false;broadcast();
+}
+
+$('createBtn').onclick=createRoom; $('joinBtn').onclick=joinRoom; $('startGameBtn').onclick=startGame; $('forceRevealBtn').onclick=revealRound;
+$('joinCode').oninput=e=>e.target.value=e.target.value.toUpperCase().replace(/[^A-Z2-9]/g,'').slice(0,6);
+$('copyCodeBtn').onclick=async()=>{ try{await navigator.clipboard.writeText(publicState.roomCode);toast('Код скопирован');}catch(e){toast('Код: '+publicState.roomCode);} };
+$('copyLinkBtn').onclick=async()=>{ const base=location.href.split('?')[0].split('#')[0]; const link=base+'?room='+encodeURIComponent(publicState.roomCode); try{await navigator.clipboard.writeText(link);toast(location.protocol==='file:'?'Ссылка скопирована. Для друзей удобнее сначала разместить файл на HTTPS-хостинге.':'Ссылка-приглашение скопирована');}catch(e){toast('Не удалось скопировать ссылку');} };
+
+window.addEventListener('beforeunload',()=>{ try{peer?.destroy();}catch(e){} });
+window.addEventListener('online',()=>setNet(peer?.open?'в сети':'интернет есть',!!peer?.open));
+window.addEventListener('offline',()=>setNet('нет интернета'));
+
+const params=new URLSearchParams(location.search); const qRoom=(params.get('room')||'').toUpperCase().replace(/[^A-Z2-9]/g,'').slice(0,6); if(qRoom.length===6){ switchTab('join'); $('joinCode').value=qRoom; }
+
+})();
+</script>
+</body>
+</html>
