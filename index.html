@@ -254,7 +254,7 @@ const API_URL='https://atwnwouzregsegmilkoi.supabase.co/functions/v1/sovpadenie-
 const API_KEY='sb_publishable_NuwO557fYjzXhFb8oaHQwA_I9QBZSYL';
 let myToken='',sessionToken='',isHost=false,hostGame=null,publicState=null;
 let localAnswers=Array(6).fill(''),localLocked=false,roundTick=null,currentRoom='',lastAnswerRound=-1;
-let pollTimer=null,pollBusy=false,lastEventId=0,statePushTimer=null;
+let pollTimer=null,pollBusy=false,lastEventId=0,statePushTimer=null,lastStateSignature='';
 
 function setNet(text,on=false){ $('netText').textContent=text; $('netDot').classList.toggle('on',on); }
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._x); t._x=setTimeout(()=>t.classList.remove('show'),2200); }
@@ -325,7 +325,7 @@ async function createRoom(){
     currentRoom=data.roomCode; myToken=data.playerId; sessionToken=data.sessionToken; isHost=true; lastEventId=0;
     hostGame={roomCode:currentRoom,phase:'lobby',roundIndex:0,currentPrompt:null,deadline:0,roundSeconds,players:{},submissions:{},roundResults:null,winnerTokens:[],history:[]};
     hostGame.players[myToken]={token:myToken,name,score:0,bonusTotal:0,connected:true,isHost:true,seat:0,submitted:false,roundScore:0,manualAdj:0};
-    publicState=sanitizeState(); enterLobby(); broadcast(); startPolling(); setNet('комната в сети',true);
+    publicState=sanitizeState();lastStateSignature=JSON.stringify(publicState);enterLobby();broadcast();startPolling();setNet('комната в сети',true);
   }catch(e){$('createBtn').disabled=false;showError(e.message||'Не удалось создать комнату.');setNet('ошибка');}
 }
 
@@ -351,7 +351,7 @@ async function joinRoom(){
   $('joinBtn').disabled=true; setNet('ищем комнату…'); currentRoom=code; isHost=false;
   try{
     const data=await api('join',{roomCode:code,name});
-    myToken=data.playerId;sessionToken=data.sessionToken;publicState=data.state;lastEventId=0;
+    myToken=data.playerId;sessionToken=data.sessionToken;publicState=data.state;lastEventId=0;lastStateSignature=publicState?JSON.stringify(publicState):'';
     setNet('подключено',true);startPolling();
     if(publicState){enterLobbyOrGame();render();}
   }catch(e){$('joinBtn').disabled=false;showError(e.message||'Не удалось войти в комнату.');setNet('не подключено');}
@@ -364,7 +364,10 @@ async function pollOnce(){
     setNet(isHost?'комната в сети':'подключено',true);
     if(isHost){
       for(const row of (data.events||[])){lastEventId=Math.max(lastEventId,Number(row.id)||0);handleHostMessage(row.event);}
-    }else if(data.state){publicState=data.state;enterLobbyOrGame();render();}
+    }else if(data.state){
+      const signature=JSON.stringify(data.state);
+      if(signature!==lastStateSignature){lastStateSignature=signature;publicState=data.state;enterLobbyOrGame();render();}
+    }
   }catch(e){setNet('восстанавливаем связь…');}
   finally{pollBusy=false;}
 }
