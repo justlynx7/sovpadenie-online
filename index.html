@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#16161a" />
   <title>СОВПАДЕНИЕ online — неофициальная веб-версия</title>
-  <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
   <style>
     :root{
       --bg:#121216;--panel:#1b1b22;--panel2:#24242e;--text:#f7f4ed;--muted:#aaa8b3;
@@ -131,7 +130,7 @@
         <div class="field"><label for="roundSeconds">Время на раунд</label><select id="roundSeconds"><option value="60" selected>60 секунд</option><option value="75">75 секунд</option><option value="90">90 секунд</option><option value="45">45 секунд</option></select></div>
       </div>
       <div class="actions"><button id="createBtn" class="btn">Создать комнату</button><button class="btn secondary" data-rules>Правила</button></div>
-      <div class="note">Работает через прямое P2P-соединение браузеров. Для самой стабильной игры лучше открыть этот файл с HTTPS-хостинга; на большинстве современных браузеров он работает и как обычный HTML-файл.</div>
+      <div class="note">Комнаты синхронизируются через защищённый серверный канал. Игра работает между телефонами и компьютерами в разных сетях — достаточно открыть эту страницу.</div>
     </div>
 
     <div id="joinForm" class="hidden">
@@ -251,34 +250,11 @@ const BLITZ_POOL = [
 
 const $ = id => document.getElementById(id);
 const esc = v => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-const sleep = ms => new Promise(r => setTimeout(r,ms));
-const randomCode = () => { const a='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<6;i++) s+=a[Math.floor(Math.random()*a.length)]; return s; };
-const randomToken = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)+Date.now().toString(36));
-let myToken = localStorage.getItem('sovpad-player-token');
-if(!myToken){ myToken=randomToken(); localStorage.setItem('sovpad-player-token',myToken); }
-
-const ICE_SERVERS = [
-  {urls:'stun:stun.l.google.com:19302'},
-  {urls:'stun:stun1.l.google.com:19302'},
-  {urls:'stun:stun2.l.google.com:19302'},
-  {urls:'stun:stun3.l.google.com:19302'},
-  {urls:'stun:stun4.l.google.com:19302'},
-  {urls:'stun:openrelay.metered.ca:80'},
-  {urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},
-  {urls:'turn:openrelay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'},
-  {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}
-];
-const PEER_OPTIONS = () => ({
-  debug:1,
-  config:{
-    iceServers:ICE_SERVERS,
-    iceTransportPolicy:'all',
-    iceCandidatePoolSize:8
-  }
-});
-
-let peer=null, hostConn=null, isHost=false, hostGame=null, publicState=null, connByToken=new Map(), tokenByPeer=new Map();
-let localAnswers=Array(6).fill(''), localLocked=false, roundTick=null, currentRoom='', lastAnswerRound=-1;
+const API_URL='https://atwnwouzregsegmilkoi.supabase.co/functions/v1/sovpadenie-room';
+const API_KEY='sb_publishable_NuwO557fYjzXhFb8oaHQwA_I9QBZSYL';
+let myToken='',sessionToken='',isHost=false,hostGame=null,publicState=null;
+let localAnswers=Array(6).fill(''),localLocked=false,roundTick=null,currentRoom='',lastAnswerRound=-1;
+let pollTimer=null,pollBusy=false,lastEventId=0,statePushTimer=null;
 
 function setNet(text,on=false){ $('netText').textContent=text; $('netDot').classList.toggle('on',on); }
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._x); t._x=setTimeout(()=>t.classList.remove('show'),2200); }
@@ -316,160 +292,86 @@ function sanitizeState(){
     winnerTokens:hostGame.winnerTokens||[]
   };
 }
-function sendToConn(conn,data){ try{ if(conn?.open) conn.send(data); }catch(e){} }
+async function api(action,payload={}){
+  const controller=new AbortController(); const timeout=setTimeout(()=>controller.abort(),12000);
+  try{
+    const response=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':API_KEY},body:JSON.stringify({action,...payload}),signal:controller.signal,cache:'no-store'});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(data.error||`Ошибка сервера (${response.status})`);
+    return data;
+  }finally{clearTimeout(timeout);}
+}
+function queueStatePush(){
+  clearTimeout(statePushTimer);
+  statePushTimer=setTimeout(async()=>{
+    if(!isHost||!publicState||!currentRoom||!sessionToken) return;
+    try{await api('state',{roomCode:currentRoom,sessionToken,state:publicState});setNet('комната в сети',true);}
+    catch(e){setNet('нет связи с сервером');toast(e.message||'Не удалось синхронизировать игру');}
+  },60);
+}
 function broadcast(){
   if(!isHost||!hostGame) return;
   publicState=sanitizeState(); render();
-  for(const conn of connByToken.values()) sendToConn(conn,{type:'state',state:publicState});
+  queueStatePush();
 }
-function sendError(conn,msg){ sendToConn(conn,{type:'error',message:msg}); }
 
 async function createRoom(){
   hideError();
   const name=$('hostName').value.trim(); if(!name){ showError('Введите имя.'); return; }
-  if(typeof Peer==='undefined'){ showError('Не загрузилась библиотека P2P. Проверьте интернет и перезагрузите страницу.'); return; }
   $('createBtn').disabled=true; setNet('создаём комнату…');
-  for(let attempt=0;attempt<5;attempt++){
-    currentRoom=randomCode();
-    const ok=await startHostPeer(currentRoom,name);
-    if(ok) return;
-  }
-  $('createBtn').disabled=false; showError('Не удалось создать комнату. Попробуйте ещё раз.'); setNet('ошибка');
+  try{
+    const roundSeconds=Number($('roundSeconds').value)||60;
+    const data=await api('create',{name,roundSeconds});
+    currentRoom=data.roomCode; myToken=data.playerId; sessionToken=data.sessionToken; isHost=true; lastEventId=0;
+    hostGame={roomCode:currentRoom,phase:'lobby',roundIndex:0,currentPrompt:null,deadline:0,roundSeconds,players:{},submissions:{},roundResults:null,winnerTokens:[],history:[]};
+    hostGame.players[myToken]={token:myToken,name,score:0,bonusTotal:0,connected:true,isHost:true,seat:0,submitted:false,roundScore:0,manualAdj:0};
+    publicState=sanitizeState(); enterLobby(); broadcast(); startPolling(); setNet('комната в сети',true);
+  }catch(e){$('createBtn').disabled=false;showError(e.message||'Не удалось создать комнату.');setNet('ошибка');}
 }
 
-function startHostPeer(code,name){
-  return new Promise(resolve=>{
-    try{ peer?.destroy(); }catch(e){}
-    const hostId='sovpadenie-'+code.toLowerCase();
-    peer=new Peer(hostId,PEER_OPTIONS());
-    let done=false;
-    peer.on('open',()=>{
-      if(done) return; done=true; isHost=true; setNet('комната в сети',true);
-      const roundSeconds=Number($('roundSeconds').value)||60;
-      hostGame={roomCode:code,phase:'lobby',roundIndex:0,currentPrompt:null,deadline:0,roundSeconds,players:{},submissions:{},roundResults:null,winnerTokens:[],history:[]};
-      hostGame.players[myToken]={token:myToken,name,score:0,bonusTotal:0,connected:true,isHost:true,seat:0,submitted:false,roundScore:0,manualAdj:0};
-      publicState=sanitizeState();
-      peer.on('connection',handleIncomingConn);
-      peer.on('disconnected',()=>{
-        setNet('восстанавливаем связь…');
-        setTimeout(()=>{
-          try{
-            if(peer && !peer.destroyed && peer.disconnected) peer.reconnect();
-          }catch(e){}
-        },1000);
-      });
-      enterLobby(); broadcast(); resolve(true);
-    });
-    peer.on('error',err=>{
-      if(err?.type==='unavailable-id' && !done){ done=true; try{peer.destroy();}catch(e){} resolve(false); return; }
-      if(!done){ done=true; resolve(false); }
-      if(err?.type!=='peer-unavailable') toast('Ошибка соединения: '+(err?.type||'unknown'));
-    });
-    setTimeout(()=>{ if(!done){done=true; try{peer.destroy();}catch(e){} resolve(false);} },7000);
-  });
-}
-
-function handleIncomingConn(conn){
-  conn.on('data',msg=>handleHostMessage(conn,msg));
-  conn.on('close',()=>{
-    const token=tokenByPeer.get(conn.peer); if(token&&hostGame?.players[token]){ hostGame.players[token].connected=false; connByToken.delete(token); tokenByPeer.delete(conn.peer); broadcast(); }
-  });
-  conn.on('error',()=>{});
-}
-function handleHostMessage(conn,msg){
+function handleHostMessage(msg){
   if(!msg||typeof msg!=='object') return;
   if(msg.type==='join'){
     const name=String(msg.name||'').trim().slice(0,24); const token=String(msg.token||'');
-    if(!name||!token){ sendError(conn,'Некорректные данные игрока.'); return; }
-    if(hostGame.phase!=='lobby' && !hostGame.players[token]){ sendError(conn,'Игра уже началась. Новые игроки не могут войти до следующей партии.'); return; }
+    if(!name||!token||hostGame.phase!=='lobby') return;
     const existing=hostGame.players[token];
-    if(!existing && playerArray().length>=8){ sendError(conn,'Комната заполнена: максимум 8 игроков.'); return; }
+    if(!existing && playerArray().length>=8) return;
     if(existing){ existing.name=name; existing.connected=true; }
     else { const seats=playerArray().map(p=>p.seat); let seat=1; while(seats.includes(seat))seat++; hostGame.players[token]={token,name,score:0,bonusTotal:0,connected:true,isHost:false,seat,submitted:false,roundScore:0,manualAdj:0}; }
-    connByToken.set(token,conn); tokenByPeer.set(conn.peer,token); conn._playerToken=token;
-    sendToConn(conn,{type:'welcome',token,state:sanitizeState()}); broadcast(); return;
+    broadcast(); return;
   }
-  const token=conn._playerToken; if(!token||!hostGame.players[token]) return;
+  const token=String(msg.token||''); if(!token||!hostGame.players[token]) return;
   if(msg.type==='submit' && hostGame.phase==='answer') submitAnswers(token,msg.answers);
-  if(msg.type==='requestState') sendToConn(conn,{type:'state',state:sanitizeState()});
 }
 
 async function joinRoom(){
   hideError();
   const name=$('guestName').value.trim(); const code=$('joinCode').value.trim().toUpperCase().replace(/[^A-Z2-9]/g,'');
   if(!name){ showError('Введите имя.'); return; } if(code.length!==6){ showError('Код комнаты состоит из 6 символов.'); return; }
-  if(typeof Peer==='undefined'){ showError('Не загрузилась библиотека P2P. Проверьте интернет и перезагрузите страницу.'); return; }
-
   $('joinBtn').disabled=true; setNet('ищем комнату…'); currentRoom=code; isHost=false;
-  try{ hostConn?.close(); }catch(e){}
-  try{ peer?.destroy(); }catch(e){}
-  hostConn=null;
-
-  let finished=false;
-  let timeout=null;
-
-  const failJoin=(message)=>{
-    if(finished) return;
-    finished=true;
-    clearTimeout(timeout);
-    $('joinBtn').disabled=false;
-    showError(message);
-    setNet('не подключено');
-    try{hostConn?.close();}catch(e){}
-    try{peer?.destroy();}catch(e){}
-  };
-
-  peer=new Peer(undefined,PEER_OPTIONS());
-
-  timeout=setTimeout(()=>{
-    if(!hostConn?.open){
-      failJoin('Соединение с комнатой не установилось. Проверьте код, оставьте страницу ведущего открытой и попробуйте ещё раз. Если один из вас использует VPN — временно отключите его.');
-    }
-  },20000);
-
-  peer.on('open',()=>{
-    if(finished) return;
-    setNet('соединяем игроков…');
-    hostConn=peer.connect('sovpadenie-'+code.toLowerCase(),{reliable:true,serialization:'json'});
-
-    hostConn.on('open',()=>{
-      if(finished) return;
-      finished=true;
-      clearTimeout(timeout);
-      setNet('подключено',true);
-      sendToConn(hostConn,{type:'join',name,token:myToken});
-    });
-
-    hostConn.on('data',handleGuestMessage);
-    hostConn.on('close',()=>{
-      if(!finished) failJoin('Соединение оборвалось во время входа. Попробуйте подключиться ещё раз.');
-      else { setNet('ведущий отключился'); toast('Связь с ведущим потеряна'); }
-    });
-    hostConn.on('error',err=>{
-      if(!finished){
-        const detail=err?.type||err?.message||'webrtc';
-        failJoin('Не удалось установить прямое соединение с ведущим ('+detail+'). Попробуйте ещё раз или смените сеть.');
-      }
-    });
-  });
-
-  peer.on('error',err=>{
-    const type=err?.type||'unknown';
-    if(type==='peer-unavailable'){
-      failJoin('Комната с таким кодом не найдена. Убедитесь, что ведущий видит статус «комната в сети» и не закрыл страницу.');
-    }else if(type==='network'||type==='server-error'||type==='socket-error'||type==='socket-closed'){
-      failJoin('Не удалось связаться с сервером подключения ('+type+'). Проверьте интернет, VPN или блокировщики и попробуйте снова.');
-    }else if(type==='webrtc'){
-      failJoin('Браузеры нашли друг друга, но WebRTC-соединение не установилось. Попробуйте ещё раз или подключитесь через другую сеть.');
-    }
-  });
+  try{
+    const data=await api('join',{roomCode:code,name});
+    myToken=data.playerId;sessionToken=data.sessionToken;publicState=data.state;lastEventId=0;
+    setNet('подключено',true);startPolling();
+    if(publicState){enterLobbyOrGame();render();}
+  }catch(e){$('joinBtn').disabled=false;showError(e.message||'Не удалось войти в комнату.');setNet('не подключено');}
 }
-function handleGuestMessage(msg){
-  if(!msg||typeof msg!=='object') return;
-  if(msg.type==='error'){ $('joinBtn').disabled=false; showError(msg.message||'Ошибка входа.'); return; }
-  if(msg.type==='welcome'||msg.type==='state'){
-    publicState=msg.state; currentRoom=publicState.roomCode; enterLobbyOrGame(); render();
-  }
+async function pollOnce(){
+  if(pollBusy||!currentRoom||!sessionToken||document.hidden) return;
+  pollBusy=true;
+  try{
+    const data=await api('poll',{roomCode:currentRoom,sessionToken,afterEventId:lastEventId});
+    setNet(isHost?'комната в сети':'подключено',true);
+    if(isHost){
+      for(const row of (data.events||[])){lastEventId=Math.max(lastEventId,Number(row.id)||0);handleHostMessage(row.event);}
+    }else if(data.state){publicState=data.state;enterLobbyOrGame();render();}
+  }catch(e){setNet('восстанавливаем связь…');}
+  finally{pollBusy=false;}
+}
+function startPolling(){clearInterval(pollTimer);pollOnce();pollTimer=setInterval(pollOnce,800);}
+async function sendGuestEvent(event){
+  try{await api('event',{roomCode:currentRoom,sessionToken,event});}
+  catch(e){localLocked=false;toast(e.message||'Ответы не отправлены');renderAnswerPhase();}
 }
 
 function enterLobby(){ $('setup').classList.add('hidden'); $('lobby').classList.remove('hidden'); $('game').classList.add('hidden'); $('reveal').classList.add('hidden'); $('final').classList.add('hidden'); }
@@ -490,9 +392,10 @@ function renderLobby(){
   document.querySelectorAll('[data-kick]').forEach(b=>b.onclick=()=>removePlayer(b.dataset.kick));
   if(isHost) $('startGameBtn').disabled=publicState.players.filter(p=>p.connected).length<3;
 }
-function removePlayer(token){
+async function removePlayer(token){
   if(!isHost||hostGame.phase!=='lobby'||!hostGame.players[token]||hostGame.players[token].isHost) return;
-  const conn=connByToken.get(token); try{conn?.close();}catch(e){} connByToken.delete(token); delete hostGame.players[token]; broadcast();
+  try{await api('kick',{roomCode:currentRoom,sessionToken,playerId:token});delete hostGame.players[token];broadcast();}
+  catch(e){toast(e.message||'Не удалось удалить игрока');}
 }
 
 function startGame(){
@@ -512,7 +415,7 @@ function submitLocal(){
   if(localLocked||!publicState||publicState.phase!=='answer') return;
   const inputs=[...document.querySelectorAll('[data-answer]')]; localAnswers=inputs.map(i=>i.value.trim());
   localLocked=true;
-  if(isHost) submitAnswers(myToken,localAnswers); else sendToConn(hostConn,{type:'submit',answers:localAnswers});
+  if(isHost) submitAnswers(myToken,localAnswers); else sendGuestEvent({type:'submit',answers:localAnswers});
   renderAnswerPhase();
 }
 function renderAnswerPhase(){
@@ -644,8 +547,7 @@ $('joinCode').oninput=e=>e.target.value=e.target.value.toUpperCase().replace(/[^
 $('copyCodeBtn').onclick=async()=>{ try{await navigator.clipboard.writeText(publicState.roomCode);toast('Код скопирован');}catch(e){toast('Код: '+publicState.roomCode);} };
 $('copyLinkBtn').onclick=async()=>{ const base=location.href.split('?')[0].split('#')[0]; const link=base+'?room='+encodeURIComponent(publicState.roomCode); try{await navigator.clipboard.writeText(link);toast(location.protocol==='file:'?'Ссылка скопирована. Для друзей удобнее сначала разместить файл на HTTPS-хостинге.':'Ссылка-приглашение скопирована');}catch(e){toast('Не удалось скопировать ссылку');} };
 
-window.addEventListener('beforeunload',()=>{ try{peer?.destroy();}catch(e){} });
-window.addEventListener('online',()=>setNet(peer?.open?'в сети':'интернет есть',!!peer?.open));
+window.addEventListener('online',()=>{setNet('восстанавливаем связь…');pollOnce();});
 window.addEventListener('offline',()=>setNet('нет интернета'));
 
 const params=new URLSearchParams(location.search); const qRoom=(params.get('room')||'').toUpperCase().replace(/[^A-Z2-9]/g,'').slice(0,6); if(qRoom.length===6){ switchTab('join'); $('joinCode').value=qRoom; }
