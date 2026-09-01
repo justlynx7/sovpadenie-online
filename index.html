@@ -257,6 +257,26 @@ const randomToken = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random
 let myToken = localStorage.getItem('sovpad-player-token');
 if(!myToken){ myToken=randomToken(); localStorage.setItem('sovpad-player-token',myToken); }
 
+const ICE_SERVERS = [
+  {urls:'stun:stun.l.google.com:19302'},
+  {urls:'stun:stun1.l.google.com:19302'},
+  {urls:'stun:stun2.l.google.com:19302'},
+  {urls:'stun:stun3.l.google.com:19302'},
+  {urls:'stun:stun4.l.google.com:19302'},
+  {urls:'stun:openrelay.metered.ca:80'},
+  {urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},
+  {urls:'turn:openrelay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'},
+  {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}
+];
+const PEER_OPTIONS = () => ({
+  debug:1,
+  config:{
+    iceServers:ICE_SERVERS,
+    iceTransportPolicy:'all',
+    iceCandidatePoolSize:8
+  }
+});
+
 let peer=null, hostConn=null, isHost=false, hostGame=null, publicState=null, connByToken=new Map(), tokenByPeer=new Map();
 let localAnswers=Array(6).fill(''), localLocked=false, roundTick=null, currentRoom='', lastAnswerRound=-1;
 
@@ -321,7 +341,7 @@ function startHostPeer(code,name){
   return new Promise(resolve=>{
     try{ peer?.destroy(); }catch(e){}
     const hostId='sovpadenie-'+code.toLowerCase();
-    peer=new Peer(hostId,{debug:1,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]}});
+    peer=new Peer(hostId,PEER_OPTIONS());
     let done=false;
     peer.on('open',()=>{
       if(done) return; done=true; isHost=true; setNet('комната в сети',true);
@@ -330,7 +350,14 @@ function startHostPeer(code,name){
       hostGame.players[myToken]={token:myToken,name,score:0,bonusTotal:0,connected:true,isHost:true,seat:0,submitted:false,roundScore:0,manualAdj:0};
       publicState=sanitizeState();
       peer.on('connection',handleIncomingConn);
-      peer.on('disconnected',()=>setNet('сигналинг потерян'));
+      peer.on('disconnected',()=>{
+        setNet('восстанавливаем связь…');
+        setTimeout(()=>{
+          try{
+            if(peer && !peer.destroyed && peer.disconnected) peer.reconnect();
+          }catch(e){}
+        },1000);
+      });
       enterLobby(); broadcast(); resolve(true);
     });
     peer.on('error',err=>{
@@ -372,19 +399,69 @@ async function joinRoom(){
   const name=$('guestName').value.trim(); const code=$('joinCode').value.trim().toUpperCase().replace(/[^A-Z2-9]/g,'');
   if(!name){ showError('Введите имя.'); return; } if(code.length!==6){ showError('Код комнаты состоит из 6 символов.'); return; }
   if(typeof Peer==='undefined'){ showError('Не загрузилась библиотека P2P. Проверьте интернет и перезагрузите страницу.'); return; }
-  $('joinBtn').disabled=true; setNet('подключаемся…'); currentRoom=code; isHost=false;
+
+  $('joinBtn').disabled=true; setNet('ищем комнату…'); currentRoom=code; isHost=false;
+  try{ hostConn?.close(); }catch(e){}
   try{ peer?.destroy(); }catch(e){}
-  peer=new Peer(undefined,{debug:1,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]}});
-  let timeout=setTimeout(()=>{ if(!hostConn?.open){ $('joinBtn').disabled=false; showError('Не удалось подключиться. Проверьте код и убедитесь, что ведущий не закрыл страницу.'); setNet('не подключено'); try{peer.destroy();}catch(e){} } },9000);
+  hostConn=null;
+
+  let finished=false;
+  let timeout=null;
+
+  const failJoin=(message)=>{
+    if(finished) return;
+    finished=true;
+    clearTimeout(timeout);
+    $('joinBtn').disabled=false;
+    showError(message);
+    setNet('не подключено');
+    try{hostConn?.close();}catch(e){}
+    try{peer?.destroy();}catch(e){}
+  };
+
+  peer=new Peer(undefined,PEER_OPTIONS());
+
+  timeout=setTimeout(()=>{
+    if(!hostConn?.open){
+      failJoin('Соединение с комнатой не установилось. Проверьте код, оставьте страницу ведущего открытой и попробуйте ещё раз. Если один из вас использует VPN — временно отключите его.');
+    }
+  },20000);
+
   peer.on('open',()=>{
-    hostConn=peer.connect('sovpadenie-'+code.toLowerCase(),{reliable:true});
-    hostConn.on('open',()=>{ clearTimeout(timeout); setNet('подключено',true); sendToConn(hostConn,{type:'join',name,token:myToken}); });
+    if(finished) return;
+    setNet('соединяем игроков…');
+    hostConn=peer.connect('sovpadenie-'+code.toLowerCase(),{reliable:true,serialization:'json'});
+
+    hostConn.on('open',()=>{
+      if(finished) return;
+      finished=true;
+      clearTimeout(timeout);
+      setNet('подключено',true);
+      sendToConn(hostConn,{type:'join',name,token:myToken});
+    });
+
     hostConn.on('data',handleGuestMessage);
-    hostConn.on('close',()=>{ setNet('ведущий отключился'); toast('Связь с ведущим потеряна'); });
-    hostConn.on('error',()=>{});
+    hostConn.on('close',()=>{
+      if(!finished) failJoin('Соединение оборвалось во время входа. Попробуйте подключиться ещё раз.');
+      else { setNet('ведущий отключился'); toast('Связь с ведущим потеряна'); }
+    });
+    hostConn.on('error',err=>{
+      if(!finished){
+        const detail=err?.type||err?.message||'webrtc';
+        failJoin('Не удалось установить прямое соединение с ведущим ('+detail+'). Попробуйте ещё раз или смените сеть.');
+      }
+    });
   });
+
   peer.on('error',err=>{
-    if(err?.type==='peer-unavailable'){ clearTimeout(timeout); $('joinBtn').disabled=false; showError('Комната с таким кодом не найдена. Проверьте код и попробуйте снова.'); setNet('не подключено'); }
+    const type=err?.type||'unknown';
+    if(type==='peer-unavailable'){
+      failJoin('Комната с таким кодом не найдена. Убедитесь, что ведущий видит статус «комната в сети» и не закрыл страницу.');
+    }else if(type==='network'||type==='server-error'||type==='socket-error'||type==='socket-closed'){
+      failJoin('Не удалось связаться с сервером подключения ('+type+'). Проверьте интернет, VPN или блокировщики и попробуйте снова.');
+    }else if(type==='webrtc'){
+      failJoin('Браузеры нашли друг друга, но WebRTC-соединение не установилось. Попробуйте ещё раз или подключитесь через другую сеть.');
+    }
   });
 }
 function handleGuestMessage(msg){
